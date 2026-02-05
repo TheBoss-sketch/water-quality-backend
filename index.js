@@ -1,27 +1,63 @@
 const express = require("express");
-const cors = require("cors");
 const app = express();
 
-app.use(cors());  
 app.use(express.json());
 
 let latestData = {
-  pH: "--",
-  TDS: "--",
-  Turbidity: "--",
-  Temperature: "--"
+  temperature: null,
+  turbidity: null,
+  quality: "Unknown",
+  score: null,
 };
 
+// ===== RECEIVE DATA FROM ESP32 =====
 app.post("/data", (req, res) => {
-  latestData = req.body;
-  res.json({ status: "received" });
+  const { temperature, turbidity } = req.body;
+
+  let quality = "Good";
+  let score = 100;
+
+  // ---- TURBIDITY LOGIC ----
+  if (turbidity < 1400) {
+    quality = "Poor";
+    score -= 50;
+  } else if (turbidity < 1700) {
+    quality = "Moderate";
+    score -= 25;
+  }
+
+  // ---- TEMPERATURE LOGIC ----
+  if (temperature > 35) {
+    quality = "Poor";
+    score -= 20;
+  } else if (temperature > 30) {
+    score -= 10;
+  }
+
+  // Clamp score
+  score = Math.max(0, Math.min(100, score));
+
+  latestData = {
+    temperature,
+    turbidity,
+    quality,
+    score,
+  };
+
+  res.status(200).json({ message: "Data received" });
 });
 
+// ===== SEND DATA TO FRONTEND =====
 app.get("/data", (req, res) => {
   res.json(latestData);
 });
 
+// ===== ROOT CHECK =====
+app.get("/", (req, res) => {
+  res.send("Water Quality Backend Running");
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log("Backend running on port", PORT);
+  console.log(`Server running on port ${PORT}`);
 });
