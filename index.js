@@ -1,9 +1,13 @@
 const express = require("express");
+const cors = require("cors");
+
 const app = express();
 
+// ---- MIDDLEWARE (ORDER MATTERS) ----
+app.use(cors());              // 👈 THIS IS THE FIX
 app.use(express.json());
 
-// Store latest data
+// ---- STORE LATEST DATA ----
 let latestData = {
   temperature: null,
   turbidity: null,
@@ -11,14 +15,14 @@ let latestData = {
   score: null,
 };
 
-// ESP32 sends data here
+// ---- ESP32 POSTS DATA HERE ----
 app.post("/data", (req, res) => {
   const { temperature, turbidity } = req.body;
 
   let quality = "Good";
   let score = 100;
 
-  // Turbidity logic (raw ADC)
+  // Turbidity logic
   if (turbidity < 1400) {
     quality = "Poor";
     score -= 50;
@@ -35,7 +39,6 @@ app.post("/data", (req, res) => {
     score -= 10;
   }
 
-  // Clamp score
   score = Math.max(0, Math.min(100, score));
 
   latestData = {
@@ -48,16 +51,17 @@ app.post("/data", (req, res) => {
   res.status(200).json({ message: "Data received" });
 });
 
-// Frontend fetches data here
+// ---- FRONTEND FETCHES HERE ----
 app.get("/data", (req, res) => {
   res.json(latestData);
 });
 
-// Health check
+// ---- HEALTH CHECK ----
 app.get("/", (req, res) => {
   res.send("Water Quality Backend Running");
 });
 
+// ---- START SERVER ----
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
