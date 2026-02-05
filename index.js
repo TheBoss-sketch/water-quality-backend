@@ -3,8 +3,8 @@ const cors = require("cors");
 
 const app = express();
 
-// ---- MIDDLEWARE (ORDER MATTERS) ----
-app.use(cors());              // 👈 THIS IS THE FIX
+// ---- MIDDLEWARE ----
+app.use(cors());            
 app.use(express.json());
 
 // ---- STORE LATEST DATA ----
