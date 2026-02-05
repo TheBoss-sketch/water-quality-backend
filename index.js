@@ -3,6 +3,7 @@ const app = express();
 
 app.use(express.json());
 
+// Store latest data
 let latestData = {
   temperature: null,
   turbidity: null,
@@ -10,14 +11,14 @@ let latestData = {
   score: null,
 };
 
-// ===== RECEIVE DATA FROM ESP32 =====
+// ESP32 sends data here
 app.post("/data", (req, res) => {
   const { temperature, turbidity } = req.body;
 
   let quality = "Good";
   let score = 100;
 
-  // ---- TURBIDITY LOGIC ----
+  // Turbidity logic (raw ADC)
   if (turbidity < 1400) {
     quality = "Poor";
     score -= 50;
@@ -26,7 +27,7 @@ app.post("/data", (req, res) => {
     score -= 25;
   }
 
-  // ---- TEMPERATURE LOGIC ----
+  // Temperature logic
   if (temperature > 35) {
     quality = "Poor";
     score -= 20;
@@ -47,12 +48,12 @@ app.post("/data", (req, res) => {
   res.status(200).json({ message: "Data received" });
 });
 
-// ===== SEND DATA TO FRONTEND =====
+// Frontend fetches data here
 app.get("/data", (req, res) => {
   res.json(latestData);
 });
 
-// ===== ROOT CHECK =====
+// Health check
 app.get("/", (req, res) => {
   res.send("Water Quality Backend Running");
 });
