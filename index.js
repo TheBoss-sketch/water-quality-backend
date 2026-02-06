@@ -3,11 +3,11 @@ const cors = require("cors");
 
 const app = express();
 
-// ---- MIDDLEWARE ----
+//  MIDDLEWARE 
 app.use(cors());            
 app.use(express.json());
 
-// ---- STORE LATEST DATA ----
+// STORE LATEST DATA
 let latestData = {
   temperature: null,
   turbidity: null,
@@ -49,17 +49,17 @@ else if (score < 75) quality = "Moderate";
   res.status(200).json({ message: "Data received" });
 });
 
-// ---- FRONTEND FETCHES HERE ----
+// FRONTEND FETCHES HERE 
 app.get("/data", (req, res) => {
   res.json(latestData);
 });
 
-// ---- HEALTH CHECK ----
+// HEALTH CHECK 
 app.get("/", (req, res) => {
   res.send("Water Quality Backend Running");
 });
 
-// ---- START SERVER ----
+// START SERVER 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
