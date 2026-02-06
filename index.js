@@ -15,7 +15,7 @@ let latestData = {
   score: null,
 };
 
-// ---- ESP32 POSTS DATA HERE ----
+// ESP32 POSTS DATA HERE 
 app.post("/data", (req, res) => {
   const { temperature, turbidity } = req.body;
 
