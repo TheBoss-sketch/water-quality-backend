@@ -3,64 +3,102 @@ const cors = require("cors");
 
 const app = express();
 
-//  MIDDLEWARE 
-app.use(cors());            
+// -------------------- MIDDLEWARE --------------------
+app.use(cors());
 app.use(express.json());
 
-// STORE LATEST DATA
+// -------------------- STORAGE --------------------
 let latestData = {
-  temperature: null,
-  turbidity: null,
-  quality: "Unknown",
-  score: null,
+  temperature: 25,
+  turbidity: 1800
 };
 
-// ESP32 POSTS DATA HERE 
+// Manual TDS input
+let manualTDS = 500;
+
+// -------------------- ROUTES --------------------
+
+// ESP32 sends temp + turbidity
 app.post("/data", (req, res) => {
   const { temperature, turbidity } = req.body;
 
-  let score = 100;
+  latestData.temperature = temperature;
+  latestData.turbidity = turbidity;
 
-// Turbidity penalties
-if (turbidity < 1400) score -= 50;
-else if (turbidity < 1700) score -= 25;
+  res.json({ message: "Data received" });
+});
 
-// Temperature penalties
-if (temperature > 35) score -= 20;
-else if (temperature > 30) score -= 10;
+// Manual TDS input from frontend
+app.post("/set-tds", (req, res) => {
+  manualTDS = req.body.tds;
+  res.json({ tds: manualTDS });
+});
 
-// Clamp score
-score = Math.max(0, Math.min(100, score));
+// Main data endpoint for frontend
+app.get("/data", (req, res) => {
 
-// Decide quality based on score
-let quality = "Good";
-if (score < 50) quality = "Poor";
-else if (score < 75) quality = "Moderate";
+  let temperature = latestData.temperature;
+  let turbidityRaw = latestData.turbidity;
+
+  // ---------------------------
+  // 1. Add fluctuation to TDS
+  // ---------------------------
+  let noise = (Math.random() * 20) - 10; // -10 to +10
+  let tds = manualTDS + noise;
+
+  // ---------------------------
+  // 2. Convert turbidity → NTU
+  // ---------------------------
+  let turbidityNTU = (2000 - turbidityRaw) * 0.5;
+
+  if (turbidityNTU < 0) turbidityNTU = 0;
+
+  // ---------------------------
+  // 3. Normalize values
+  // ---------------------------
+  let t_norm = Math.min(temperature / 40, 1);
+  let turb_norm = Math.min(turbidityNTU / 100, 1);
+  let tds_norm = Math.min(tds / 1000, 1);
+
+  // ---------------------------
+  // 4. Regression-style scoring
+  // ---------------------------
+  let score = 100 * (
+    0.4 * (1 - turb_norm) +
+    0.3 * (1 - tds_norm) +
+    0.3 * (1 - t_norm)
+  );
 
   score = Math.max(0, Math.min(100, score));
 
-  latestData = {
+  // ---------------------------
+  // 5. Classification
+  // ---------------------------
+  let quality = "Good";
+  if (score < 50) quality = "Poor";
+  else if (score < 75) quality = "Moderate";
+
+  // ---------------------------
+  // RESPONSE
+  // ---------------------------
+  res.json({
     temperature,
-    turbidity,
-    quality,
-    score,
-  };
-
-  res.status(200).json({ message: "Data received" });
+    turbidityRaw,
+    turbidityNTU: Number(turbidityNTU.toFixed(2)),
+    tds: Number(tds.toFixed(2)),
+    score: Number(score.toFixed(1)),
+    quality
+  });
 });
 
-// FRONTEND FETCHES HERE 
-app.get("/data", (req, res) => {
-  res.json(latestData);
-});
-
-// HEALTH CHECK 
+// Health check
 app.get("/", (req, res) => {
-  res.send("Water Quality Backend Running");
+  res.send("Backend running");
 });
 
-// START SERVER 
+// -------------------- SERVER --------------------
 const PORT = process.env.PORT || 3000;
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
