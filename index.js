@@ -12,12 +12,12 @@ let latestData = {
   turbidity: 1400
 };
 
-// Manual TDS (starts LOW)
+// TDS (starts low)
 let manualTDS = 5;
 
 // ---------------- ROUTES ----------------
 
-// ESP32 input
+// ESP32 sends temp + turbidity
 app.post("/data", (req, res) => {
   const { temperature, turbidity } = req.body;
 
@@ -27,7 +27,7 @@ app.post("/data", (req, res) => {
   res.json({ message: "ok" });
 });
 
-// Control panel input
+// Control panel sets TDS
 app.post("/set-tds", (req, res) => {
   manualTDS = req.body.tds;
   res.json({ tds: manualTDS });
@@ -37,46 +37,49 @@ app.post("/set-tds", (req, res) => {
 app.get("/data", (req, res) => {
 
   let temperature = latestData.temperature;
-  let turbidityRaw = latestData.turbidity;
+  let raw = latestData.turbidity;
 
-  // -------- TDS (small fluctuation) --------
-  let tds = manualTDS + (Math.random() * 4 - 2);
+  // ---------------- TDS ----------------
+  let tds = manualTDS + (Math.random() * 2 - 1);
   if (tds < 0) tds = 0;
 
-  // -------- TURBIDITY CALIBRATION --------
- // -------- TURBIDITY CALIBRATION --------
-let clean = 1418;   // your clean water
-let dirty = 1200;   // your air / dirty baseline
+  // ---------------- TURBIDITY (FIXED LOGIC) ----------------
+  // YOUR CALIBRATION
+  let CLEAN = 1418;   // clean water
+  let DIRTY = 1200;   // worst baseline
 
-let turbidityNTU = (clean - turbidityRaw) * (100 / (clean - dirty));
+  // Map raw → NTU (0 = clean, 100 = dirty)
+  let ntu = (CLEAN - raw) * (100 / (CLEAN - DIRTY));
 
-// clamp
-if (turbidityNTU < 0) turbidityNTU = 0;
-if (turbidityNTU > 100) turbidityNTU = 100;
+  // Clamp properly
+  if (ntu < 0) ntu = 0;
+  if (ntu > 100) ntu = 100;
 
-  // -------- NORMALIZATION --------
+  // ---------------- NORMALIZATION ----------------
   let temp_norm = Math.min(temperature / 40, 1);
-  let turb_norm = Math.min(turbidityNTU / 100, 1);
+  let turb_norm = Math.min(ntu / 100, 1);
   let tds_norm = Math.min(tds / 1000, 1);
 
-  // -------- SCORING --------
+  // ---------------- SCORE ----------------
   let score = 100 * (
     0.5 * (1 - turb_norm) +
     0.3 * (1 - tds_norm) +
     0.2 * (1 - temp_norm)
   );
 
-  score = Math.max(0, Math.min(100, score));
+  if (score < 0) score = 0;
+  if (score > 100) score = 100;
 
+  // ---------------- QUALITY ----------------
   let quality = "Excellent";
   if (score < 40) quality = "Poor";
   else if (score < 65) quality = "Moderate";
   else if (score < 85) quality = "Good";
 
-  // -------- RESPONSE --------
+  // ---------------- RESPONSE ----------------
   res.json({
     temperature_c: Number(temperature.toFixed(2)),
-    turbidity_ntu: Number(turbidityNTU.toFixed(2)),
+    turbidity_ntu: Number(ntu.toFixed(2)),
     tds_mg_per_l: Number(tds.toFixed(2)),
     score_percent: Number(score.toFixed(1)),
     quality
@@ -84,7 +87,7 @@ if (turbidityNTU > 100) turbidityNTU = 100;
 
 });
 
-// health
+// Health check
 app.get("/", (req, res) => {
   res.send("Backend running");
 });
