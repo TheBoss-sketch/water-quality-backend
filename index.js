@@ -45,8 +45,8 @@ app.get("/data", (req, res) => {
 
   // ---------------- TURBIDITY (FIXED LOGIC) ----------------
   // YOUR CALIBRATION
-  let CLEAN = 1418;   // clean water
-  let DIRTY = 1200;   // worst baseline
+  let CLEAN = 1200;   // clean water
+  let DIRTY = 1000;   // worst baseline
 
   // Map raw → NTU (0 = clean, 100 = dirty)
   let ntu = (CLEAN - raw) * (100 / (CLEAN - DIRTY));
