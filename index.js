@@ -44,15 +44,15 @@ app.get("/data", (req, res) => {
   if (tds < 0) tds = 0;
 
   // -------- TURBIDITY CALIBRATION --------
-  let clean = 1418;
-  let dirty = 1200;
+ // -------- TURBIDITY CALIBRATION --------
+let clean = 1418;   // your clean water
+let dirty = 1200;   // your air / dirty baseline
 
-  let turbidityNTU = (turbidityRaw - dirty) * (100 / (clean - dirty));
+let turbidityNTU = (clean - turbidityRaw) * (100 / (clean - dirty));
 
-  if (turbidityNTU < 0) turbidityNTU = 0;
-
-  // invert scale → clean = low NTU
-  turbidityNTU = 100 - turbidityNTU;
+// clamp
+if (turbidityNTU < 0) turbidityNTU = 0;
+if (turbidityNTU > 100) turbidityNTU = 100;
 
   // -------- NORMALIZATION --------
   let temp_norm = Math.min(temperature / 40, 1);
