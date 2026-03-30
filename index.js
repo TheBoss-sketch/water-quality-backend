@@ -1,110 +1,128 @@
-const express = require("express");
-const cors = require("cors");
+#include <WiFi.h>
+#include <HTTPClient.h>
 
-const app = express();
+// ---------------- WIFI ----------------
+const char* ssid = "Divya's A16";
+const char* password = "55555555";
 
-// -------------------- MIDDLEWARE --------------------
-app.use(cors());
-app.use(express.json());
+// ---------------- BACKEND ----------------
+const char* serverURL = "https://water-quality-backend-gl86.onrender.com/data";
 
-// -------------------- STORAGE --------------------
-let latestData = {
-  temperature: 25,   // °C
-  turbidity: 1800    // raw ADC
-};
+// ---------------- PINS ----------------
+#define TURB_PIN 35
+#define TDS_PIN 34
 
-// Manual TDS input (ppm ≈ mg/L)
-let manualTDS = 500;
+// ---------------- TEMP SENSOR ----------------
+#include <OneWire.h>
+#include <DallasTemperature.h>
 
-// -------------------- ROUTES --------------------
+#define ONE_WIRE_BUS 15
 
-// ESP32 sends temp + turbidity
-app.post("/data", (req, res) => {
-  const { temperature, turbidity } = req.body;
+OneWire oneWire(ONE_WIRE_BUS);
+DallasTemperature sensors(&oneWire);
 
-  if (temperature !== undefined) latestData.temperature = temperature;
-  if (turbidity !== undefined) latestData.turbidity = turbidity;
+// ---------------- STORAGE ----------------
+float turbidityBuffer[10];
+int turbIndex = 0;
 
-  res.json({ message: "Data received" });
-});
+// ---------------- SETUP ----------------
+void setup() {
+  Serial.begin(115200);
 
-// Manual TDS from phone
-app.post("/set-tds", (req, res) => {
-  manualTDS = req.body.tds;
-  res.json({ tds: manualTDS });
-});
+  pinMode(TURB_PIN, INPUT);
+  pinMode(TDS_PIN, INPUT);
 
-// MAIN DATA ENDPOINT
-app.get("/data", (req, res) => {
+  sensors.begin();
 
-  let temperature = latestData.temperature;
-  let turbidityRaw = latestData.turbidity;
+  WiFi.begin(ssid, password);
 
-  // ---------------------------
-  // 1. TDS with realistic fluctuation
-  // ---------------------------
-  let noise = (Math.random() * 20) - 10; // ±10 ppm
-  let tds = manualTDS + noise;
+  Serial.print("Connecting...");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nWiFi Connected");
+}
+
+// ---------------- TDS FUNCTION (LOW BASELINE) ----------------
+float readTDS() {
+
+  // simulate near pure water
+  float base = 5; // mg/L (very low)
+
+  float noise = random(-3, 3);
+
+  float tds = base + noise;
 
   if (tds < 0) tds = 0;
 
-  // ---------------------------
-  // 2. Turbidity → NTU (improved mapping)
-  // ---------------------------
-  // Empirical approximation (for cheap sensors)
-  let voltage = turbidityRaw * (3.3 / 4095);
+  return tds;
+}
 
-  let turbidityNTU = -1120.4 * (voltage * voltage) + 5742.3 * voltage - 4352.9;
+// ---------------- AVERAGE FUNCTION ----------------
+float getAverageTurbidity() {
 
-  if (turbidityNTU < 0) turbidityNTU = 0;
+  float sum = 0;
 
-  // ---------------------------
-  // 3. Normalize (0–1 scale)
-  // ---------------------------
-  let temp_norm = Math.min(temperature / 40, 1);
-  let turb_norm = Math.min(turbidityNTU / 100, 1);
-  let tds_norm = Math.min(tds / 1000, 1);
+  for (int i = 0; i < 10; i++) {
+    sum += turbidityBuffer[i];
+  }
 
-  // ---------------------------
-  // 4. Regression-style scoring
-  // ---------------------------
-  let score = 100 * (
-    0.45 * (1 - turb_norm) +
-    0.35 * (1 - tds_norm) +
-    0.20 * (1 - temp_norm)
-  );
+  return sum / 10.0;
+}
 
-  score = Math.max(0, Math.min(100, score));
+// ---------------- LOOP ----------------
+void loop() {
 
-  // ---------------------------
-  // 5. Classification
-  // ---------------------------
-  let quality = "Excellent";
-  if (score < 40) quality = "Poor";
-  else if (score < 65) quality = "Moderate";
-  else if (score < 85) quality = "Good";
+  // -------- TEMPERATURE --------
+  sensors.requestTemperatures();
+  float temp = sensors.getTempCByIndex(0);
 
-  // ---------------------------
-  // RESPONSE (CLEAN + SI)
-  // ---------------------------
-  res.json({
-    temperature_c: Number(temperature.toFixed(2)),   // °C
-    turbidity_ntu: Number(turbidityNTU.toFixed(2)),  // NTU
-    tds_mg_per_l: Number(tds.toFixed(2)),            // mg/L (ppm)
-    score_percent: Number(score.toFixed(1)),         // %
-    quality
-  });
+  // -------- TURBIDITY --------
+  int raw = analogRead(TURB_PIN);
 
-});
+  turbidityBuffer[turbIndex] = raw;
+  turbIndex++;
 
-// Health check
-app.get("/", (req, res) => {
-  res.send("Backend running");
-});
+  if (turbIndex >= 10) turbIndex = 0;
 
-// -------------------- SERVER --------------------
-const PORT = process.env.PORT || 3000;
+  float turbidityRaw = getAverageTurbidity();
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+  // -------- TDS --------
+  float tdsValue = readTDS();
+
+  // -------- SERIAL --------
+  Serial.print("Temp: ");
+  Serial.print(temp);
+  Serial.print(" °C | ");
+
+  Serial.print("Turbidity(avg): ");
+  Serial.print(turbidityRaw);
+  Serial.print(" | ");
+
+  Serial.print("TDS: ");
+  Serial.print(tdsValue);
+  Serial.println(" mg/L");
+
+  // -------- SEND TO BACKEND --------
+  if (WiFi.status() == WL_CONNECTED) {
+
+    HTTPClient http;
+    http.begin(serverURL);
+    http.addHeader("Content-Type", "application/json");
+
+    String jsonData = "{";
+    jsonData += "\"temperature\":" + String(temp) + ",";
+    jsonData += "\"turbidity\":" + String(turbidityRaw);
+    jsonData += "}";
+
+    int code = http.POST(jsonData);
+
+    Serial.print("HTTP: ");
+    Serial.println(code);
+
+    http.end();
+  }
+
+  delay(1000); // 1 sec → 10 samples = ~10 sec smoothing
+}
