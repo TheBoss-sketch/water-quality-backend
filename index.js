@@ -45,15 +45,15 @@ app.get("/data", (req, res) => {
 
   // ---------------- TURBIDITY (FIXED LOGIC) ----------------
   // YOUR CALIBRATION
-  let CLEAN = 1200;   // clean water
-  let DIRTY = 1000;   // worst baseline
+let CLEAN = 1260;     // update this when needed
+let RANGE = 200;      // keep this constant
 
-  // Map raw → NTU (0 = clean, 100 = dirty)
-  let ntu = (CLEAN - raw) * (100 / (CLEAN - DIRTY));
+let DIRTY = CLEAN - RANGE;
 
-  // Clamp properly
-  if (ntu < 0) ntu = 0;
-  if (ntu > 100) ntu = 100;
+let ntu = (CLEAN - raw) * (100 / RANGE);
+
+if (ntu < 0) ntu = 0;
+if (ntu > 100) ntu = 100;
 
   // ---------------- NORMALIZATION ----------------
   let temp_norm = Math.min(temperature / 40, 1);
