@@ -45,7 +45,7 @@ app.get("/data", (req, res) => {
 
   // ---------------- TURBIDITY (FIXED LOGIC) ----------------
   // YOUR CALIBRATION
-let CLEAN = 1360;     // update this when needed
+let CLEAN = 1110;     // update this when needed
 let RANGE = 200;      // keep this constant
 
 let DIRTY = CLEAN - RANGE;
